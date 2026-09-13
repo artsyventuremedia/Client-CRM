@@ -1,0 +1,117 @@
+model Invoice {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceNumber  String
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id])
+  status         InvoiceStatus @default(DRAFT)
+  issueDate      DateTime      @default(now())
+  dueDate        DateTime?
+  subtotal       Decimal       @default(0) @db.Decimal(14, 2)
+  discountTotal  Decimal       @default(0) @db.Decimal(14, 2)
+  taxTotal       Decimal       @default(0) @db.Decimal(14, 2)
+  grandTotal     Decimal       @default(0) @db.Decimal(14, 2)
+  amountPaid     Decimal       @default(0) @db.Decimal(14, 2)
+  paymentTerms   String?
+  notes          String?
+  sentAt         DateTime?
+  viewedAt       DateTime?
+  isRecurring    Boolean       @default(false)
+  recurringCycle BillingCycle?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  items       InvoiceItem[]
+  payments    Payment[]
+  creditNotes CreditNote[]
+  debitNotes  DebitNote[]
+
+  @@unique([organizationId, invoiceNumber])
+  @@index([organizationId, status])
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id              String  @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description     String
+  quantity        Decimal @default(1) @db.Decimal(10, 2)
+  unitPrice       Decimal @db.Decimal(14, 2)
+  discountPercent Decimal @default(0) @db.Decimal(5, 2)
+  taxPercent      Decimal @default(0) @db.Decimal(5, 2)
+  lineTotal       Decimal @db.Decimal(14, 2)
+
+  @@index([invoiceId])
+  @@map("invoice_items")
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client        @relation(fields: [clientId], references: [id])
+  invoiceId      String?
+  invoice        Invoice?      @relation(fields: [invoiceId], references: [id])
+  amount         Decimal       @db.Decimal(14, 2)
+  method         PaymentMethod
+  status         PaymentStatus @default(PENDING)
+  transactionId  String?
+  notes          String?
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  gatewayTransaction PaymentTransaction?
+
+  @@index([organizationId, status])
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+model PaymentTransaction {
+  id               String   @id @default(cuid())
+  paymentId        String   @unique
+  payment          Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  gateway          String
+  gatewayOrderId   String?
+  gatewayPaymentId String?
+  gatewaySignature String?
+  webhookVerified  Boolean  @default(false)
+  webhookPayload   Json?
+  idempotencyKey   String   @unique
+  createdAt        DateTime @default(now())
+
+  @@map("payment_transactions")
+}
+
+model CreditNote {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId        String
+  invoice          Invoice      @relation(fields: [invoiceId], references: [id])
+  creditNoteNumber String
+  amount           Decimal      @db.Decimal(14, 2)
+  reason           String?
+  createdAt        DateTime     @default(now())
+
+  @@unique([organizationId, creditNoteNumber])
+  @@map("credit_notes")
+}
+
+model DebitNote {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoiceId       String
+  invoice         Invoice      @relation(fields: [invoiceId], references: [id])
+  debitNoteNumber String
+  amount          Decimal      @db.Decimal(14, 2)
+  reason          String?
+  createdAt       DateTime     @default(now())
+
+  @@unique([organizationId, debitNoteNumber])
+  @@map("debit_notes")
+}

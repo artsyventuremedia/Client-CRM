@@ -1,0 +1,63 @@
+model Ticket {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ticketNumber   String
+  clientId       String
+  client         Client         @relation(fields: [clientId], references: [id])
+  subject        String
+  description    String?
+  category       String?
+  priority       TicketPriority @default(MEDIUM)
+  status         TicketStatus   @default(OPEN)
+  assigneeId     String?
+  assignee       User?          @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  resolvedAt     DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  comments    TicketComment[]
+  attachments TicketAttachment[]
+  sla         TicketSla?
+
+  @@unique([organizationId, ticketNumber])
+  @@index([organizationId, status])
+  @@map("tickets")
+}
+
+model TicketComment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?    @relation(fields: [authorId], references: [id])
+  content    String
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_comments")
+}
+
+model TicketAttachment {
+  id         String   @id @default(cuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  documentId String
+  createdAt  DateTime @default(now())
+
+  @@map("ticket_attachments")
+}
+
+model TicketSla {
+  id               String    @id @default(cuid())
+  ticketId         String    @unique
+  ticket           Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  responseDueAt    DateTime
+  resolutionDueAt  DateTime
+  firstRespondedAt DateTime?
+  breached         Boolean   @default(false)
+
+  @@map("ticket_slas")
+}

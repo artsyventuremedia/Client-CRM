@@ -1,0 +1,153 @@
+model Project {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client          @relation(fields: [clientId], references: [id])
+  serviceOrderId String?
+  serviceOrder   ServiceOrder?   @relation(fields: [serviceOrderId], references: [id])
+  name           String
+  description    String?
+  managerId      String?
+  manager        User?           @relation("ProjectManager", fields: [managerId], references: [id])
+  startDate      DateTime?
+  targetDate     DateTime?
+  budget         Decimal?        @db.Decimal(14, 2)
+  priority       ProjectPriority @default(MEDIUM)
+  status         ProjectStatus   @default(PLANNING)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  members           ProjectMember[]
+  milestones        ProjectMilestone[]
+  tasks             Task[]
+  vendorAssignments VendorAssignment[]
+
+  @@index([organizationId, status])
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  role      String?
+  addedAt   DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model ProjectMilestone {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name        String
+  dueDate     DateTime?
+  completedAt DateTime?
+  order       Int       @default(0)
+
+  @@index([projectId])
+  @@map("project_milestones")
+}
+
+model Task {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId           String?
+  projectId          String?
+  project            Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  serviceOrderId     String?
+  title              String
+  description        String?
+  assigneeId         String?
+  assignee           User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdById        String?
+  createdBy          User?        @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  vendorAssignmentId String?
+  priority           TaskPriority @default(MEDIUM)
+  status             TaskStatus   @default(TODO)
+  startDate          DateTime?
+  dueDate            DateTime?
+  estimatedHours     Decimal?     @db.Decimal(6, 2)
+  actualHours        Decimal?     @db.Decimal(6, 2)
+  parentTaskId       String?
+  parentTask         Task?        @relation("Subtasks", fields: [parentTaskId], references: [id])
+  subtasks           Task[]       @relation("Subtasks")
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  comments       TaskComment[]
+  attachments    TaskAttachment[]
+  timeEntries    TaskTimeEntry[]
+  dependsOn      TaskDependency[]    @relation("DependentTask")
+  dependedOnBy   TaskDependency[]    @relation("DependsOnTask")
+  checklistItems TaskChecklistItem[]
+
+  @@index([organizationId, status])
+  @@index([projectId])
+  @@index([assigneeId])
+  @@map("tasks")
+}
+
+model TaskChecklistItem {
+  id     String  @id @default(cuid())
+  taskId String
+  task   Task    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label  String
+  isDone Boolean @default(false)
+  order  Int     @default(0)
+
+  @@map("task_checklist_items")
+}
+
+model TaskComment {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  content    String
+  isInternal Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([taskId])
+  @@map("task_comments")
+}
+
+model TaskAttachment {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  documentId String
+  createdAt  DateTime @default(now())
+
+  @@map("task_attachments")
+}
+
+model TaskDependency {
+  id            String @id @default(cuid())
+  taskId        String
+  task          Task   @relation("DependentTask", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnId   String
+  dependsOnTask Task   @relation("DependsOnTask", fields: [dependsOnId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dependsOnId])
+  @@map("task_dependencies")
+}
+
+model TaskTimeEntry {
+  id       String   @id @default(cuid())
+  taskId   String
+  task     Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  minutes  Int
+  note     String?
+  loggedAt DateTime @default(now())
+
+  @@index([taskId])
+  @@map("task_time_entries")
+}

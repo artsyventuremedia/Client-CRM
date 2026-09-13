@@ -1,0 +1,44 @@
+model ServiceCategory {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+
+  services Service[]
+
+  @@unique([organizationId, name])
+  @@map("service_categories")
+}
+
+model Service {
+  id                     String           @id @default(cuid())
+  organizationId         String
+  organization           Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  categoryId             String?
+  category               ServiceCategory? @relation(fields: [categoryId], references: [id])
+  name                   String
+  description            String?
+  features               String[]         @default([])
+  pricingModel           PricingModel     @default(ONE_TIME)
+  oneTimePrice           Decimal?         @db.Decimal(14, 2)
+  monthlyPrice           Decimal?         @db.Decimal(14, 2)
+  quarterlyPrice         Decimal?         @db.Decimal(14, 2)
+  halfYearlyPrice        Decimal?         @db.Decimal(14, 2)
+  annualPrice            Decimal?         @db.Decimal(14, 2)
+  taxRatePercent         Decimal          @default(0) @db.Decimal(5, 2)
+  defaultDiscountPercent Decimal          @default(0) @db.Decimal(5, 2)
+  slaDays                Int?
+  durationDays           Int?
+  renewalCycle           BillingCycle     @default(ANNUAL)
+  isActive               Boolean          @default(true)
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+
+  quotationItems QuotationItem[]
+  serviceOrders  ServiceOrder[]
+  vendorServices VendorService[]
+
+  @@index([organizationId])
+  @@map("services")
+}

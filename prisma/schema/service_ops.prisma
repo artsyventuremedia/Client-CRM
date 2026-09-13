@@ -1,0 +1,49 @@
+model ServiceOrder {
+  id               String             @id @default(cuid())
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId         String
+  client           Client             @relation(fields: [clientId], references: [id])
+  serviceId        String
+  service          Service            @relation(fields: [serviceId], references: [id])
+  contractId       String?
+  contract         Contract?          @relation(fields: [contractId], references: [id])
+  quantity         Decimal            @default(1) @db.Decimal(10, 2)
+  price            Decimal            @db.Decimal(14, 2)
+  taxPercent       Decimal            @default(0) @db.Decimal(5, 2)
+  discountPercent  Decimal            @default(0) @db.Decimal(5, 2)
+  billingCycle     BillingCycle       @default(ANNUAL)
+  startDate        DateTime
+  endDate          DateTime?
+  renewalDate      DateTime?
+  accountManagerId String?
+  status           ServiceOrderStatus @default(PENDING)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  projects Project[]
+  renewals Renewal[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, renewalDate])
+  @@map("service_orders")
+}
+
+model Renewal {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client             @relation(fields: [clientId], references: [id])
+  serviceOrderId String
+  serviceOrder   ServiceOrder       @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  expiryDate     DateTime
+  renewalAmount  Decimal            @db.Decimal(14, 2)
+  status         ServiceOrderStatus @default(RENEWAL_DUE)
+  remindersSent  Int[]              @default([])
+  resolvedAt     DateTime?
+  createdAt      DateTime           @default(now())
+
+  @@index([organizationId, expiryDate])
+  @@map("renewals")
+}
