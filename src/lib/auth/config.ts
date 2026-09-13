@@ -6,11 +6,15 @@ import { prisma } from "@/lib/prisma";
 import type { Permission } from "@/generated/prisma";
 import type { SessionPermissions } from "@/lib/rbac/check";
 import { edgeAuthConfig } from "./edge-config";
+import { rateLimit, clientIp } from "@/lib/security/rate-limit";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
 
 async function loadPermissions(userId: string): Promise<SessionPermissions> {
   const userRoles = await prisma.userRole.findMany({
@@ -39,23 +43,57 @@ export const authConfig: NextAuthConfig = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      authorize: async (raw) => {
+      authorize: async (raw, request) => {
         const parsed = credentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
         const { email, password } = parsed.data;
+        const normalizedEmail = email.toLowerCase();
+
+        const ip = request ? clientIp(request) : "unknown";
+        const userAgent = request?.headers.get("user-agent") ?? undefined;
+
+        // Cap login attempts per source IP regardless of which account is
+        // targeted, so credential-stuffing across many accounts is also slowed.
+        const ipLimit = rateLimit(`login-ip:${ip}`, 20, 15 * 60 * 1000);
+        if (!ipLimit.allowed) return null;
 
         const user = await prisma.user.findFirst({
-          where: { email: email.toLowerCase() },
+          where: { email: normalizedEmail },
         });
         if (!user || !user.passwordHash) return null;
         if (user.status === "SUSPENDED" || user.status === "INACTIVE") return null;
 
+        if (user.lockedUntil && user.lockedUntil > new Date()) {
+          await prisma.loginActivity.create({
+            data: { userId: user.id, ipAddress: ip, userAgent, success: false },
+          });
+          return null;
+        }
+
         const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
+
+        if (!valid) {
+          const attempts = user.failedLoginAttempts + 1;
+          const lockingNow = attempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              failedLoginAttempts: lockingNow ? 0 : attempts,
+              lockedUntil: lockingNow ? new Date(Date.now() + LOCKOUT_DURATION_MS) : null,
+            },
+          });
+          await prisma.loginActivity.create({
+            data: { userId: user.id, ipAddress: ip, userAgent, success: false },
+          });
+          return null;
+        }
 
         await prisma.user.update({
           where: { id: user.id },
-          data: { lastLoginAt: new Date() },
+          data: { lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null },
+        });
+        await prisma.loginActivity.create({
+          data: { userId: user.id, ipAddress: ip, userAgent, success: true },
         });
 
         return {
@@ -64,6 +102,7 @@ export const authConfig: NextAuthConfig = {
           name: user.name,
           organizationId: user.organizationId,
           isPlatformAdmin: user.isPlatformAdmin,
+          tokenVersion: user.tokenVersion,
         };
       },
     }),
@@ -74,6 +113,7 @@ export const authConfig: NextAuthConfig = {
         token.userId = user.id;
         token.organizationId = (user as { organizationId?: string | null }).organizationId ?? null;
         token.isPlatformAdmin = (user as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false;
+        token.tokenVersion = (user as { tokenVersion?: number }).tokenVersion ?? 0;
         token.permissions = await loadPermissions(user.id!);
       }
       if (trigger === "update" && token.userId) {
@@ -86,6 +126,7 @@ export const authConfig: NextAuthConfig = {
         session.user.id = token.userId as string;
         session.user.organizationId = (token.organizationId as string | null) ?? null;
         session.user.isPlatformAdmin = Boolean(token.isPlatformAdmin);
+        session.user.tokenVersion = Number(token.tokenVersion ?? 0);
         session.user.permissions = (token.permissions as Record<string, Permission[]>) ?? {};
       }
       return session;

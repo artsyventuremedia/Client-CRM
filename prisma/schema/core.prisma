@@ -152,20 +152,23 @@ model RolePermission {
 }
 
 model User {
-  id              String        @id @default(cuid())
-  organizationId  String?
-  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  email           String
-  passwordHash    String?
-  name            String
-  phone           String?
-  avatarUrl       String?
-  status          UserStatus    @default(PENDING_VERIFICATION)
-  isPlatformAdmin Boolean       @default(false)
-  emailVerifiedAt DateTime?
-  lastLoginAt     DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                  String        @id @default(cuid())
+  organizationId      String?
+  organization        Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email               String
+  passwordHash        String?
+  name                String
+  phone               String?
+  avatarUrl           String?
+  status              UserStatus    @default(PENDING_VERIFICATION)
+  isPlatformAdmin     Boolean       @default(false)
+  emailVerifiedAt     DateTime?
+  lastLoginAt         DateTime?
+  failedLoginAttempts Int           @default(0)
+  lockedUntil         DateTime?
+  tokenVersion        Int           @default(0)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   roles                UserRole[]
   teamMemberships      TeamMember[]

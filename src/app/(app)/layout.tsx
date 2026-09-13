@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/auth/active-session";
 import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) redirect("/login");
 
   const orgName = session.user.organizationId

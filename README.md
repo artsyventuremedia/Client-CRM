@@ -33,6 +33,14 @@ Local development doesn't require Docker: `npx prisma dev` spins up a local Post
 server with no external dependency, which is what this repo was built and tested against. Point
 `DATABASE_URL` at any real Postgres instance for staging/production.
 
+**If you use `prisma dev`**: keep `connection_limit=1` on `DATABASE_URL` (already set in
+`.env.example`). Without it, this repo's combination of Next.js Turbopack dev mode + `prisma dev`'s
+local proxy intermittently throws `prepared statement "s0" already exists` (Postgres error 42P05) —
+a connection-multiplexing quirk in the disposable local dev server, not a bug in the app. If it
+happens anyway, `npx prisma dev stop <name> && npx prisma dev -n <name> --db-port <port> -d` clears
+the proxy's state without losing data. This class of issue does not occur against a real Postgres
+instance (staging/production, or a Dockerized/Homebrew Postgres locally).
+
 ### Demo login
 
 After seeding, sign in at `/login` with any of the seeded users (see `prisma/seed.ts` for the full
@@ -160,24 +168,63 @@ Recommended before any further module ships: integration tests hitting the real 
 original brief — payment double-processing, tax/total correctness, and renewal automation in
 particular need dedicated coverage once those modules exist.
 
-## Security notes
+## Security features
 
+Implemented and tested (see [Testing](#testing) for what was verified and how):
+
+- **Password policy**: registration and reset both require 8+ characters with upper, lower, digit, and
+  symbol (`src/lib/validation/password.ts`), enforced server-side via Zod — never trust client-side
+  validation alone.
+- **Account lockout**: 5 failed login attempts locks the account for 15 minutes
+  (`MAX_FAILED_LOGIN_ATTEMPTS` / `LOCKOUT_DURATION_MS` in `src/lib/auth/config.ts`). Every attempt,
+  success or failure, is written to `LoginActivity` with IP and user-agent for audit/forensics.
+- **Rate limiting**: in-memory sliding-window limiter (`src/lib/security/rate-limit.ts`) applied to
+  `/api/auth/register` (5/hour/IP), `/api/auth/forgot-password` (5/15min/IP **and** 3/15min/email, so
+  an attacker can't flood one victim's inbox by rotating source IPs), `/api/auth/reset-password`
+  (10/15min/IP), and login itself (20/15min/IP, inside `authorize()`, independent of which account is
+  targeted so credential-stuffing across many accounts is also slowed). **This is in-process memory
+  and resets on restart / isn't shared across instances — back it with Redis before running more than
+  one server process.**
+- **Session revocation ("sign out of all devices")**: sessions are JWTs, which are otherwise stateless
+  and can't be revoked early. Each user has a `tokenVersion` counter; `POST /api/auth/sign-out-all`
+  increments it, and `getActiveSession()` (`src/lib/auth/active-session.ts`) — used by every API route
+  guard and by the `(app)` layout — checks the current token's version against the database on every
+  request and rejects stale ones immediately, rather than waiting for the JWT to naturally expire (up
+  to 30 days). The same check also enforces that a suspended/locked account is cut off immediately,
+  not just at next login. This DB check is why the Edge/Node split matters (see
+  [Auth](#auth) above): it can only run in Node-runtime code, which is exactly where it's wired in.
+- **Password reset tokens**: single-use, hashed at rest (`PasswordResetToken.token` stores a SHA-256
+  hash, never the raw token), 1-hour expiry, and the forgot-password response is identical whether or
+  not the email exists (no account enumeration).
+- **Security headers** (`next.config.ts`): CSP, `X-Frame-Options: DENY`, `X-Content-Type-Options:
+  nosniff`, `Strict-Transport-Security`, `Referrer-Policy`, `Permissions-Policy`, and `X-Powered-By`
+  removed. The CSP's `script-src` currently allows `'unsafe-inline' 'unsafe-eval'` because Next.js's
+  own hydration/HMR runtime needs it — tighten with per-request nonces before a stricter CSP is
+  required for production.
+- **Platform-level uniqueness**: a partial unique index (`WHERE "organizationId" IS NULL`) on
+  `users.email` and `roles.name` closes a gap where Postgres's compound unique constraints treat NULL
+  as distinct, which would otherwise let two platform-level rows collide silently
+  (migration `20260913083905_platform_level_unique_indexes`).
 - Payment status must only ever be set from a verified gateway webhook (signature-checked), never from
   a frontend response — the `PaymentTransaction` table has `webhookVerified` and a unique
   `idempotencyKey` for this, but no gateway is wired up yet. Do not add a "mark as paid" path that
   bypasses that when building the invoicing module.
 - File downloads must go through signed, access-controlled URLs once object storage is wired up — the
   `Document` model stores a `storageKey`, not a public path, in anticipation of this.
-- All authorization is server-side (API route guards); nothing in the client should be trusted for
-  access control.
+- All authorization is server-side (API route guards + `getActiveSession()`); nothing in the client
+  should be trusted for access control.
 
 ## Known gaps to fix before production
 
-- `User.organizationId + email` and `Role.organizationId + name` uniqueness is enforced by a Prisma
-  compound unique index, but Postgres treats `NULL` as distinct in unique indexes — two platform-level
-  users (`organizationId = null`) could theoretically collide on email without a DB-level conflict.
-  A partial unique index (`WHERE organization_id IS NULL`) should be added via a raw migration before
-  the platform-admin surface grows beyond the single seeded super admin.
-- No rate limiting on `/api/auth/*` yet (brute-force protection).
-- No 2FA (architecture allows for it — `LoginActivity` already tracks login attempts — but no TOTP
-  flow is wired up).
+- Rate limiting is in-process memory only (see above) — move to Redis (or similar) before running
+  more than one server instance, or the limits become trivially bypassable by hitting different
+  instances.
+- No 2FA yet (architecture allows for it — `LoginActivity` already tracks every attempt — but no TOTP
+  enrollment/verification flow is wired up).
+- `getActiveSession()` adds one DB round-trip per request to check lockout/revocation status. Fine at
+  this scale; if this becomes a hot path under load, cache the check for a few seconds instead of
+  hitting the database on every single request.
+- The forgot-password lookup (`prisma.user.findFirst({ where: { email } })`) isn't scoped to an
+  organization, so if the same email happens to exist under two different tenants, the reset email
+  goes to whichever one Postgres returns first. Low-probability, but worth fixing if this becomes an
+  outward-facing multi-tenant product.

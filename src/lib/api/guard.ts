@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getActiveSession } from "@/lib/auth/active-session";
 import { can } from "@/lib/rbac/check";
 import type { Resource } from "@/lib/rbac/matrix";
 import type { Permission } from "@/generated/prisma";
@@ -15,7 +15,7 @@ export class ApiError extends Error {
 }
 
 export async function requireSession(): Promise<Session> {
-  const session = await auth();
+  const session = await getActiveSession();
   if (!session?.user) {
     throw new ApiError(401, "Authentication required");
   }

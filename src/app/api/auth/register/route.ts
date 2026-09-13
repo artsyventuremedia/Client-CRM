@@ -3,8 +3,17 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { registerOrgSchema } from "@/lib/validation/auth";
 import { slugify } from "@/lib/slug";
+import { rateLimit, clientIp } from "@/lib/security/rate-limit";
 
 export async function POST(request: Request) {
+  const limit = rateLimit(`register:${clientIp(request)}`, 5, 60 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many registration attempts. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = registerOrgSchema.safeParse(body);
   if (!parsed.success) {

@@ -3,8 +3,17 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { resetPasswordSchema } from "@/lib/validation/auth";
 import { hashToken } from "@/lib/tokens";
+import { rateLimit, clientIp } from "@/lib/security/rate-limit";
 
 export async function POST(request: Request) {
+  const limit = rateLimit(`reset-password:${clientIp(request)}`, 10, 15 * 60 * 1000);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many attempts. Please try again later." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = resetPasswordSchema.safeParse(body);
   if (!parsed.success) {

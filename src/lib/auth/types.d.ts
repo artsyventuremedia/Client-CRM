@@ -9,6 +9,7 @@ declare module "next-auth" {
       id: string;
       organizationId: string | null;
       isPlatformAdmin: boolean;
+      tokenVersion: number;
       permissions: Record<string, Permission[]>;
     } & DefaultSession["user"];
   }
@@ -16,6 +17,7 @@ declare module "next-auth" {
   interface User {
     organizationId?: string | null;
     isPlatformAdmin?: boolean;
+    tokenVersion?: number;
   }
 }
 
@@ -24,6 +26,7 @@ declare module "next-auth/jwt" {
     userId?: string;
     organizationId?: string | null;
     isPlatformAdmin?: boolean;
+    tokenVersion?: number;
     permissions?: Record<string, Permission[]>;
   }
 }
