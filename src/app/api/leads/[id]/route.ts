@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireOrgSession, requirePermission, handleApiError, ApiError } from "@/lib/api/guard";
 import { updateLeadSchema } from "@/lib/validation/lead";
 import { recordAudit } from "@/lib/audit";
+import { notify } from "@/lib/notify";
 
 async function loadLeadOrThrow(id: string, organizationId: string) {
   const lead = await prisma.lead.findFirst({ where: { id, organizationId } });
@@ -74,6 +75,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       previousValue: existing,
       newValue: lead,
     });
+
+    if (lead.assignedToId && lead.assignedToId !== existing.assignedToId && lead.assignedToId !== session.user.id) {
+      await notify({
+        organizationId,
+        userId: lead.assignedToId,
+        event: "lead.assigned",
+        title: "Lead assigned to you",
+        body: lead.name,
+        data: { url: `/leads/${lead.id}` },
+      });
+    }
 
     return NextResponse.json({ lead });
   } catch (error) {

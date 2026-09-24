@@ -23,5 +23,12 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Tickets", href: "/tickets", resource: "tickets", permission: "VIEW" },
   { label: "Appointments", href: "/appointments", resource: "appointments", permission: "VIEW" },
   { label: "Reports", href: "/reports", resource: "reports", permission: "VIEW" },
+  { label: "Team & Clients", href: "/team", resource: "users", permission: "CREATE" },
+  { label: "Automations", href: "/automations", resource: "automations", permission: "VIEW" },
   { label: "Settings", href: "/settings", resource: "settings", permission: "VIEW" },
+];
+
+export const PLATFORM_NAV_ITEMS: Array<{ label: string; href: string }> = [
+  { label: "Organizations", href: "/admin/organizations" },
+  { label: "Feature Toggles", href: "/admin/feature-toggles" },
 ];

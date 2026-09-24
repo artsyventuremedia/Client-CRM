@@ -10,6 +10,8 @@ export const clientCategoryValues = [
   "OTHER",
 ] as const;
 
+export const clientStatusValues = ["ACTIVE", "INACTIVE", "AT_RISK", "RENEWAL_RISK", "PAYMENT_RISK", "CHURNED"] as const;
+
 export const createClientSchema = z.object({
   name: z.string().min(1).max(200),
   companyName: z.string().max(200).optional(),
@@ -23,5 +25,5 @@ export const createClientSchema = z.object({
 });
 
 export const updateClientSchema = createClientSchema.partial().extend({
-  status: z.enum(["ACTIVE", "INACTIVE", "AT_RISK", "RENEWAL_RISK", "PAYMENT_RISK", "CHURNED"]).optional(),
+  status: z.enum(clientStatusValues).optional(),
 });

@@ -11,6 +11,8 @@ declare module "next-auth" {
       isPlatformAdmin: boolean;
       tokenVersion: number;
       permissions: Record<string, Permission[]>;
+      systemRoles: string[];
+      clientId: string | null;
     } & DefaultSession["user"];
   }
 
@@ -28,5 +30,7 @@ declare module "next-auth/jwt" {
     isPlatformAdmin?: boolean;
     tokenVersion?: number;
     permissions?: Record<string, Permission[]>;
+    systemRoles?: string[];
+    clientId?: string | null;
   }
 }

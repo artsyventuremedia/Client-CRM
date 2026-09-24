@@ -14,6 +14,11 @@ model Organization {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  /** Super Admin approval gate: whether this org's ADMIN-role users (not the ORG_OWNER) may create Employee/Client logins. */
+  adminsCanManageUsers Boolean  @default(false)
+  /** Optional allow-list of SystemRole values an approved Admin may assign; empty = no restriction beyond the default rules. */
+  adminAssignableRoles String[] @default([])
+
   users                 User[]
   departments           Department[]
   teams                 Team[]
@@ -44,6 +49,11 @@ model Organization {
   subscription          Subscription?
   roles                 Role[]
   tasks                 Task[]
+  kickoffDocuments      KickoffDocument[]
+  contentSheets         ContentSheet[]
+  savedViews            SavedView[]
+  comments              Comment[]
+  pendingCredentials    PendingCredential[]
 
   @@map("organizations")
 }
@@ -151,6 +161,66 @@ model RolePermission {
   @@map("role_permissions")
 }
 
+model RoleFeatureToggle {
+  id         String     @id @default(cuid())
+  systemRole SystemRole
+  resource   String
+  enabled    Boolean    @default(true)
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([systemRole, resource])
+  @@map("role_feature_toggles")
+}
+
+model Comment {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entityType     String
+  entityId       String
+  authorId       String
+  author         User         @relation(fields: [authorId], references: [id])
+  content        String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([entityType, entityId])
+  @@map("comments")
+}
+
+model PendingCredential {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email          String
+  tempPassword   String
+  role           String
+  createdById    String?
+  createdBy      User?        @relation("PendingCredentialCreatedBy", fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+
+  @@index([organizationId])
+  @@map("pending_credentials")
+}
+
+model SavedView {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resource       String
+  name           String
+  params         Json
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, resource, name])
+  @@map("saved_views")
+}
+
 model User {
   id                  String        @id @default(cuid())
   organizationId      String?
@@ -198,6 +268,13 @@ model User {
   ticketComments        TicketComment[]
   organizedAppointments Appointment[]        @relation("AppointmentOrganizer")
   meetingParticipations MeetingParticipant[]
+  kickoffDocumentsCreated  KickoffDocument[]
+  contentSheetsCreated     ContentSheet[]
+  contentSheetItemsCreated ContentSheetItem[]
+  savedViews               SavedView[]
+  comments                 Comment[]
+  pendingCredential        PendingCredential?
+  pendingCredentialsIssued PendingCredential[] @relation("PendingCredentialCreatedBy")
 
   @@unique([organizationId, email])
   @@index([organizationId])

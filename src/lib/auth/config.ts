@@ -22,15 +22,42 @@ async function loadPermissions(userId: string): Promise<SessionPermissions> {
     include: { role: { include: { permissions: true } } },
   });
 
+  const systemRoles = userRoles
+    .map((ur) => ur.role.systemRole)
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  const disabledToggles =
+    systemRoles.length > 0
+      ? await prisma.roleFeatureToggle.findMany({
+          where: { systemRole: { in: systemRoles }, enabled: false },
+        })
+      : [];
+  const disabled = new Set(disabledToggles.map((t) => `${t.systemRole}:${t.resource}`));
+
   const permissions: SessionPermissions = {};
   for (const ur of userRoles) {
+    const systemRole = ur.role.systemRole;
     for (const rp of ur.role.permissions) {
+      if (systemRole && disabled.has(`${systemRole}:${rp.resource}`)) continue;
       const existing = permissions[rp.resource] ?? [];
       if (!existing.includes(rp.permission)) existing.push(rp.permission);
       permissions[rp.resource] = existing;
     }
   }
   return permissions;
+}
+
+async function loadSystemRoles(userId: string): Promise<string[]> {
+  const userRoles = await prisma.userRole.findMany({
+    where: { userId },
+    select: { role: { select: { systemRole: true } } },
+  });
+  return userRoles.map((ur) => ur.role.systemRole).filter((r): r is NonNullable<typeof r> => r !== null);
+}
+
+async function loadClientId(userId: string): Promise<string | null> {
+  const contact = await prisma.clientContact.findUnique({ where: { userId }, select: { clientId: true } });
+  return contact?.clientId ?? null;
 }
 
 export const authConfig: NextAuthConfig = {
@@ -95,6 +122,8 @@ export const authConfig: NextAuthConfig = {
         await prisma.loginActivity.create({
           data: { userId: user.id, ipAddress: ip, userAgent, success: true },
         });
+        // Once the admin-issued login is actually used, the plaintext temp password no longer needs to be retrievable.
+        await prisma.pendingCredential.deleteMany({ where: { userId: user.id } });
 
         return {
           id: user.id,
@@ -115,9 +144,13 @@ export const authConfig: NextAuthConfig = {
         token.isPlatformAdmin = (user as { isPlatformAdmin?: boolean }).isPlatformAdmin ?? false;
         token.tokenVersion = (user as { tokenVersion?: number }).tokenVersion ?? 0;
         token.permissions = await loadPermissions(user.id!);
+        token.systemRoles = await loadSystemRoles(user.id!);
+        token.clientId = await loadClientId(user.id!);
       }
       if (trigger === "update" && token.userId) {
         token.permissions = await loadPermissions(token.userId as string);
+        token.systemRoles = await loadSystemRoles(token.userId as string);
+        token.clientId = await loadClientId(token.userId as string);
       }
       return token;
     },
@@ -128,6 +161,8 @@ export const authConfig: NextAuthConfig = {
         session.user.isPlatformAdmin = Boolean(token.isPlatformAdmin);
         session.user.tokenVersion = Number(token.tokenVersion ?? 0);
         session.user.permissions = (token.permissions as Record<string, Permission[]>) ?? {};
+        session.user.systemRoles = (token.systemRoles as string[]) ?? [];
+        session.user.clientId = (token.clientId as string | null) ?? null;
       }
       return session;
     },

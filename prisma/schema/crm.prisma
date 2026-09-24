@@ -24,6 +24,7 @@ model Lead {
   nextFollowupAt      DateTime?
   convertedClientId   String?      @unique
   convertedClient     Client?      @relation("LeadConversion", fields: [convertedClientId], references: [id])
+  convertedAt         DateTime?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
@@ -131,9 +132,73 @@ model Client {
   appointments    Appointment[]
   documents       DocumentClientLink[]
   renewals        Renewal[]
+  kickoffDocuments KickoffDocument[]
+  contentSheets    ContentSheet[]
 
   @@index([organizationId, status])
   @@map("clients")
+}
+
+model KickoffDocument {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId        String
+  client          Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title           String
+  goals           String?
+  scope           String?
+  timeline        String?
+  targetAudience  String?
+  brandGuidelines String?
+  keyContacts     String?
+  notes           String?
+  createdById     String?
+  createdBy       User?        @relation(fields: [createdById], references: [id])
+  sharedAt        DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId, clientId])
+  @@map("kickoff_documents")
+}
+
+model ContentSheet {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  month          Int
+  year           Int
+  createdById    String?
+  createdBy      User?    @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+
+  items ContentSheetItem[]
+
+  @@unique([clientId, month, year])
+  @@index([organizationId, clientId])
+  @@map("content_sheets")
+}
+
+model ContentSheetItem {
+  id             String            @id @default(cuid())
+  contentSheetId String
+  contentSheet   ContentSheet      @relation(fields: [contentSheetId], references: [id], onDelete: Cascade)
+  date           DateTime?
+  platform       String?
+  contentType    String?
+  caption        String?
+  status         ContentItemStatus @default(DRAFT)
+  notes          String?
+  createdById    String?
+  createdBy      User?             @relation(fields: [createdById], references: [id])
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([contentSheetId])
+  @@map("content_sheet_items")
 }
 
 model ClientContact {

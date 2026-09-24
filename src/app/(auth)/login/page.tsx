@@ -71,9 +71,6 @@ function LoginForm() {
             <Link href="/forgot-password" className="hover:underline">
               Forgot password?
             </Link>
-            <Link href="/register" className="hover:underline">
-              Create an organization
-            </Link>
           </div>
         </form>
       </CardContent>

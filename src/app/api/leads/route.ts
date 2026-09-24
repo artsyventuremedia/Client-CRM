@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireOrgSession, requirePermission, handleApiError } from "@/lib/api/guard";
 import { createLeadSchema, leadStatusValues } from "@/lib/validation/lead";
 import { recordAudit } from "@/lib/audit";
+import { notify } from "@/lib/notify";
+import { runAutomations } from "@/lib/automations/engine";
 
 export async function GET(request: Request) {
   try {
@@ -83,7 +85,21 @@ export async function POST(request: Request) {
       newValue: lead,
     });
 
-    return NextResponse.json({ lead }, { status: 201 });
+    if (lead.assignedToId && lead.assignedToId !== session.user.id) {
+      await notify({
+        organizationId,
+        userId: lead.assignedToId,
+        event: "lead.assigned",
+        title: "New lead assigned to you",
+        body: lead.name,
+        data: { url: `/leads/${lead.id}` },
+      });
+    }
+
+    await runAutomations(organizationId, "lead.created", "Lead", lead);
+    const finalLead = await prisma.lead.findUnique({ where: { id: lead.id } });
+
+    return NextResponse.json({ lead: finalLead }, { status: 201 });
   } catch (error) {
     return handleApiError(error);
   }

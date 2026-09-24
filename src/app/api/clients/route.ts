@@ -64,6 +64,9 @@ export async function POST(request: Request) {
       if (!lead) {
         return NextResponse.json({ error: "Lead not found" }, { status: 404 });
       }
+      if (lead.convertedClientId) {
+        return NextResponse.json({ error: "Lead has already been converted to a client" }, { status: 409 });
+      }
     }
 
     const client = await prisma.$transaction(async (tx) => {
@@ -84,7 +87,7 @@ export async function POST(request: Request) {
       if (data.leadId) {
         await tx.lead.update({
           where: { id: data.leadId },
-          data: { status: "WON", convertedClientId: created.id },
+          data: { status: "WON", convertedClientId: created.id, convertedAt: new Date() },
         });
       }
 

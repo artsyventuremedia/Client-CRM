@@ -1,8 +1,13 @@
-import { notFound } from "next/navigation";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/rbac/check";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { DocumentList } from "@/components/documents/document-list";
+import { EditableField } from "@/components/detail/editable-field";
 
 function money(amount: number) {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
@@ -22,6 +27,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const session = await auth();
   const organizationId = session?.user.organizationId;
   if (!organizationId) return null;
+  if (!session.user.isPlatformAdmin && !can(session.user.permissions, "clients", "VIEW")) redirect("/dashboard");
 
   const client = await prisma.client.findFirst({
     where: { id, organizationId },
@@ -40,9 +46,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       tickets: { orderBy: { createdAt: "desc" } },
       appointments: { orderBy: { startTime: "desc" } },
       renewals: { orderBy: { expiryDate: "asc" } },
+      originatingLead: { select: { id: true, name: true, convertedAt: true } },
     },
   });
   if (!client) notFound();
+
+  const canEdit = session.user.isPlatformAdmin || can(session.user.permissions, "clients", "EDIT");
+  const patchUrl = `/api/clients/${client.id}`;
 
   const outstanding = client.invoices.reduce((sum, inv) => sum + (Number(inv.grandTotal) - Number(inv.amountPaid)), 0);
   const totalInvoiced = client.invoices.reduce((sum, inv) => sum + Number(inv.grandTotal), 0);
@@ -52,12 +62,45 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">{client.companyName ?? client.name}</h1>
+          <h1 className="text-xl font-semibold text-slate-900">
+            <EditableField
+              patchUrl={patchUrl}
+              field="name"
+              value={client.name}
+              displayValue={client.companyName ?? client.name}
+              canEdit={canEdit}
+            />
+          </h1>
           <p className="text-sm text-slate-500">
-            {client.category.replaceAll("_", " ")} · {client.industry ?? "Industry not set"}
+            {client.category.replaceAll("_", " ")} ·{" "}
+            <EditableField
+              patchUrl={patchUrl}
+              field="industry"
+              value={client.industry ?? ""}
+              displayValue={client.industry ?? "Industry not set"}
+              canEdit={canEdit}
+            />
           </p>
+          {client.originatingLead?.convertedAt && (
+            <p className="mt-1 text-xs text-slate-400">
+              Converted from lead &quot;{client.originatingLead.name}&quot; on{" "}
+              {new Date(client.originatingLead.convertedAt).toLocaleDateString()}
+            </p>
+          )}
         </div>
-        <Badge tone={STATUS_TONE[client.status] ?? "neutral"}>{client.status.replaceAll("_", " ")}</Badge>
+        <div className="flex items-center gap-3">
+          {can(session.user.permissions, "kickoff_documents", "VIEW") && (
+            <Link href={`/clients/${client.id}/kickoff`} className="text-sm text-slate-600 underline hover:text-slate-900">
+              Kickoff Document
+            </Link>
+          )}
+          {can(session.user.permissions, "content_sheets", "VIEW") && (
+            <Link href={`/clients/${client.id}/content-sheets`} className="text-sm text-slate-600 underline hover:text-slate-900">
+              Content Sheets
+            </Link>
+          )}
+          <Badge tone={STATUS_TONE[client.status] ?? "neutral"}>{client.status.replaceAll("_", " ")}</Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -95,6 +138,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <CardContent className="flex flex-col gap-2 text-sm text-slate-600">
             <p>Sales owner: {client.salesOwner?.name ?? "—"}</p>
             <p>Account manager: {client.accountManager?.name ?? "—"}</p>
+            <p>
+              GST: <EditableField patchUrl={patchUrl} field="gstNumber" value={client.gstNumber ?? ""} canEdit={canEdit} />
+            </p>
+            <p>
+              PAN: <EditableField patchUrl={patchUrl} field="panNumber" value={client.panNumber ?? ""} canEdit={canEdit} />
+            </p>
             <div className="mt-2">
               {client.contacts.length === 0 && <p className="text-slate-400">No contacts added.</p>}
               {client.contacts.map((c) => (
@@ -239,6 +288,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           ))}
         </CardContent>
       </Card>
+      <DocumentList entityType="Client" entityId={client.id} />
+      <ActivityTimeline entityType="Client" entityId={client.id} />
+
     </div>
   );
 }

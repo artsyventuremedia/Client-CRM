@@ -24,6 +24,9 @@
 .DS_Store
 *.pem
 
+# uploaded file attachments (local disk storage)
+/storage/
+
 # debug
 npm-debug.log*
 yarn-debug.log*

@@ -1,9 +1,16 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/rbac/check";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { CreateClientDialog } from "@/components/clients/create-client-dialog";
+import { ListToolbar } from "@/components/list/list-toolbar";
+import { SavedViewsMenu } from "@/components/list/saved-views-menu";
+import { Pagination } from "@/components/list/pagination";
+import { DataTable, type DataTableRow } from "@/components/list/data-table";
+import { parseListSearchParams, type SearchParamsLike } from "@/lib/list-query";
+import { clientStatusValues } from "@/lib/validation/client";
 
 const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger" | "info"> = {
   ACTIVE: "success",
@@ -14,21 +21,66 @@ const STATUS_TONE: Record<string, "neutral" | "success" | "warning" | "danger" |
   CHURNED: "danger",
 };
 
-export default async function ClientsPage() {
+const QUERY_CONFIG = {
+  searchFields: ["name", "companyName", "industry"],
+  filterField: "status",
+  filterValues: clientStatusValues,
+  sortFields: { created: "createdAt", name: "name" },
+  defaultSort: "created",
+};
+
+export default async function ClientsPage({ searchParams }: { searchParams: Promise<SearchParamsLike> }) {
   const session = await auth();
   const organizationId = session?.user.organizationId;
   if (!organizationId) return null;
+  if (!session.user.isPlatformAdmin && !can(session.user.permissions, "clients", "VIEW")) redirect("/dashboard");
 
-  const clients = await prisma.client.findMany({
-    where: { organizationId },
-    include: {
-      salesOwner: { select: { name: true } },
-      accountManager: { select: { name: true } },
-      _count: { select: { projects: true, invoices: true, tickets: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
+  const sp = await searchParams;
+  const query = parseListSearchParams(sp, QUERY_CONFIG);
+  const canBulk = session.user.isPlatformAdmin || can(session.user.permissions, "clients", "EDIT");
+  const canBulkDelete = session.user.isPlatformAdmin || can(session.user.permissions, "clients", "DELETE");
+
+  const [clients, total] = await Promise.all([
+    prisma.client.findMany({
+      where: { organizationId, ...query.where },
+      include: {
+        salesOwner: { select: { name: true } },
+        accountManager: { select: { name: true } },
+        _count: { select: { projects: true, invoices: true, tickets: true } },
+      },
+      orderBy: query.orderBy,
+      skip: query.skip,
+      take: query.take,
+    }),
+    prisma.client.count({ where: { organizationId, ...query.where } }),
+  ]);
+
+  const rows: DataTableRow[] = clients.map((client) => ({
+    id: client.id,
+    cells: [
+      <Link key="name" href={`/clients/${client.id}`} className="font-medium text-slate-900 hover:underline">
+        {client.companyName ?? client.name}
+      </Link>,
+      <span key="category" className="text-slate-600">
+        {client.category.replaceAll("_", " ")}
+      </span>,
+      <Badge key="status" tone={STATUS_TONE[client.status] ?? "neutral"}>
+        {client.status.replaceAll("_", " ")}
+      </Badge>,
+      <span key="manager" className="text-slate-600">
+        {client.accountManager?.name ?? "Unassigned"}
+      </span>,
+      <span key="projects" className="text-slate-600">
+        {client._count.projects}
+      </span>,
+      <span key="invoices" className="text-slate-600">
+        {client._count.invoices}
+      </span>,
+      <span key="tickets" className="text-slate-600">
+        {client._count.tickets}
+      </span>,
+    ],
+  }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -40,47 +92,29 @@ export default async function ClientsPage() {
         <CreateClientDialog />
       </div>
 
-      <Card className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-100 text-xs uppercase text-slate-400">
-            <tr>
-              <th className="px-4 py-2 font-medium">Client</th>
-              <th className="px-4 py-2 font-medium">Category</th>
-              <th className="px-4 py-2 font-medium">Status</th>
-              <th className="px-4 py-2 font-medium">Account Manager</th>
-              <th className="px-4 py-2 font-medium">Projects</th>
-              <th className="px-4 py-2 font-medium">Invoices</th>
-              <th className="px-4 py-2 font-medium">Open Tickets</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clients.map((client) => (
-              <tr key={client.id} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="px-4 py-2">
-                  <Link href={`/clients/${client.id}`} className="font-medium text-slate-900 hover:underline">
-                    {client.companyName ?? client.name}
-                  </Link>
-                </td>
-                <td className="px-4 py-2 text-slate-600">{client.category.replaceAll("_", " ")}</td>
-                <td className="px-4 py-2">
-                  <Badge tone={STATUS_TONE[client.status] ?? "neutral"}>{client.status.replaceAll("_", " ")}</Badge>
-                </td>
-                <td className="px-4 py-2 text-slate-600">{client.accountManager?.name ?? "Unassigned"}</td>
-                <td className="px-4 py-2 text-slate-600">{client._count.projects}</td>
-                <td className="px-4 py-2 text-slate-600">{client._count.invoices}</td>
-                <td className="px-4 py-2 text-slate-600">{client._count.tickets}</td>
-              </tr>
-            ))}
-            {clients.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                  No clients yet. Convert a lead or create a client directly.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </Card>
+      <ListToolbar
+        searchPlaceholder="Search clients..."
+        filterLabel="All statuses"
+        filterOptions={clientStatusValues.map((s) => ({ value: s, label: s.replaceAll("_", " ") }))}
+        sortOptions={[
+          { value: "created", label: "Created" },
+          { value: "name", label: "Name" },
+        ]}
+        exportHref="/api/clients/export"
+      />
+
+      <SavedViewsMenu resource="clients" />
+
+      <DataTable
+        headers={["Client", "Category", "Status", "Account Manager", "Projects", "Invoices", "Open Tickets"]}
+        rows={rows}
+        emptyMessage="No clients yet. Convert a lead or create a client directly."
+        bulkResource={canBulk ? "clients" : undefined}
+        bulkStatusOptions={canBulk ? clientStatusValues.map((s) => ({ value: s, label: s.replaceAll("_", " ") })) : undefined}
+        canBulkDelete={canBulkDelete}
+      />
+
+      <Pagination page={query.page} pageSize={query.pageSize} total={total} />
     </div>
   );
 }

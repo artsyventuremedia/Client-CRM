@@ -20,6 +20,8 @@ export const RESOURCES = [
   "users",
   "settings",
   "automations",
+  "kickoff_documents",
+  "content_sheets",
 ] as const;
 
 export type Resource = (typeof RESOURCES)[number];
@@ -60,6 +62,8 @@ export const DEFAULT_ROLE_MATRIX: Record<SystemRole, Partial<Record<Resource, Pe
     reports: ["VIEW", "EXPORT"],
     appointments: RW,
     tasks: RW,
+    kickoff_documents: RW,
+    content_sheets: RW,
   },
 
   SALES_EXECUTIVE: {
@@ -68,6 +72,8 @@ export const DEFAULT_ROLE_MATRIX: Record<SystemRole, Partial<Record<Resource, Pe
     quotations: ["VIEW", "CREATE", "EDIT"],
     appointments: RW,
     tasks: RO,
+    kickoff_documents: RW,
+    content_sheets: RW,
   },
 
   ACCOUNT_MANAGER: {
@@ -80,6 +86,8 @@ export const DEFAULT_ROLE_MATRIX: Record<SystemRole, Partial<Record<Resource, Pe
     appointments: RW,
     tickets: RO,
     invoices: RO,
+    kickoff_documents: RW,
+    content_sheets: RW,
   },
 
   PROJECT_MANAGER: {
@@ -88,12 +96,16 @@ export const DEFAULT_ROLE_MATRIX: Record<SystemRole, Partial<Record<Resource, Pe
     vendors: [...RW, "ASSIGN"],
     clients: RO,
     documents: RW,
+    kickoff_documents: RW,
+    content_sheets: RW,
   },
 
   EMPLOYEE: {
     tasks: ["VIEW", "EDIT"],
     projects: RO,
     documents: RO,
+    kickoff_documents: RW,
+    content_sheets: RW,
   },
 
   FINANCE_MANAGER: {
@@ -127,5 +139,7 @@ export const DEFAULT_ROLE_MATRIX: Record<SystemRole, Partial<Record<Resource, Pe
     appointments: ["VIEW", "CREATE"],
     documents: ["VIEW", "DOWNLOAD", "CREATE"],
     renewals: RO,
+    kickoff_documents: RO,
+    content_sheets: ["VIEW", "CREATE", "EDIT"],
   },
 };

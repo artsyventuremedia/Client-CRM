@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "./nav-config";
+import { NAV_ITEMS, PLATFORM_NAV_ITEMS } from "./nav-config";
 import { can } from "@/lib/rbac/check";
 import type { Permission } from "@/generated/prisma";
 
@@ -42,6 +42,26 @@ export function Sidebar({
             </Link>
           );
         })}
+        {isPlatformAdmin && (
+          <>
+            <p className="mt-3 px-3 text-xs font-semibold uppercase text-slate-400">Platform Admin</p>
+            {PLATFORM_NAV_ITEMS.map((item) => {
+              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "block rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100",
+                    active && "bg-slate-900 text-white hover:bg-slate-900",
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </>
+        )}
       </nav>
     </aside>
   );

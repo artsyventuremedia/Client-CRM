@@ -1,14 +1,21 @@
-import { notFound } from "next/navigation";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/rbac/check";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConvertLeadDialog } from "@/components/leads/convert-lead-dialog";
+import { ActivityTimeline } from "@/components/activity/activity-timeline";
+import { DocumentList } from "@/components/documents/document-list";
+import { EditableField } from "@/components/detail/editable-field";
 
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await auth();
   const organizationId = session?.user.organizationId;
   if (!organizationId) return null;
+  if (!session.user.isPlatformAdmin && !can(session.user.permissions, "leads", "VIEW")) redirect("/dashboard");
 
   const lead = await prisma.lead.findFirst({
     where: { id, organizationId },
@@ -22,14 +29,49 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   });
   if (!lead) notFound();
 
+  const canEdit = session.user.isPlatformAdmin || can(session.user.permissions, "leads", "EDIT");
+  const patchUrl = `/api/leads/${lead.id}`;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">{lead.name}</h1>
-          <p className="text-sm text-slate-500">{lead.company ?? "Individual lead"}</p>
+          <h1 className="text-xl font-semibold text-slate-900">
+            <EditableField patchUrl={patchUrl} field="name" value={lead.name} canEdit={canEdit} />
+          </h1>
+          <p className="text-sm text-slate-500">
+            <EditableField
+              patchUrl={patchUrl}
+              field="company"
+              value={lead.company ?? ""}
+              displayValue={lead.company ?? "Individual lead"}
+              canEdit={canEdit}
+            />
+          </p>
         </div>
-        <Badge tone="info">{lead.status.replaceAll("_", " ")}</Badge>
+        <div className="flex items-center gap-3">
+          <Badge tone="info">{lead.status.replaceAll("_", " ")}</Badge>
+          {lead.convertedClientId ? (
+            <div className="text-right text-xs text-slate-500">
+              <p>
+                Converted to client on{" "}
+                <span className="font-medium text-slate-700">
+                  {lead.convertedAt ? new Date(lead.convertedAt).toLocaleDateString() : "—"}
+                </span>
+              </p>
+              <Link href={`/clients/${lead.convertedClientId}`} className="text-slate-900 underline">
+                View client
+              </Link>
+            </div>
+          ) : (
+            <ConvertLeadDialog
+              leadId={lead.id}
+              defaultName={lead.name}
+              defaultCompanyName={lead.company ?? ""}
+              defaultIndustry={lead.industry ?? ""}
+            />
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -38,17 +80,41 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             <CardTitle>Lead Details</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm text-slate-600">
-            <p>Email: {lead.email ?? "—"}</p>
-            <p>Phone: {lead.phone ?? "—"}</p>
-            <p>Source: {lead.source ?? "—"}</p>
+            <p>
+              Email: <EditableField patchUrl={patchUrl} field="email" value={lead.email ?? ""} canEdit={canEdit} />
+            </p>
+            <p>
+              Phone: <EditableField patchUrl={patchUrl} field="phone" value={lead.phone ?? ""} canEdit={canEdit} />
+            </p>
+            <p>
+              Source: <EditableField patchUrl={patchUrl} field="source" value={lead.source ?? ""} canEdit={canEdit} />
+            </p>
             <p>Assigned to: {lead.assignedTo?.name ?? "Unassigned"}</p>
             <p>
               Estimated value:{" "}
-              {lead.estimatedValue
-                ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(lead.estimatedValue))
-                : "—"}
+              <EditableField
+                patchUrl={patchUrl}
+                field="estimatedValue"
+                type="number"
+                value={lead.estimatedValue ? String(lead.estimatedValue) : ""}
+                displayValue={
+                  lead.estimatedValue
+                    ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(lead.estimatedValue))
+                    : undefined
+                }
+                canEdit={canEdit}
+              />
             </p>
-            <p>Requirement: {lead.requirement ?? "—"}</p>
+            <p>
+              Requirement:{" "}
+              <EditableField
+                patchUrl={patchUrl}
+                field="requirement"
+                type="textarea"
+                value={lead.requirement ?? ""}
+                canEdit={canEdit}
+              />
+            </p>
           </CardContent>
         </Card>
 
@@ -107,6 +173,9 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           ))}
         </CardContent>
       </Card>
+
+      <DocumentList entityType="Lead" entityId={lead.id} />
+      <ActivityTimeline entityType="Lead" entityId={lead.id} />
     </div>
   );
 }
