@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, PLATFORM_NAV_ITEMS } from "./nav-config";
 import { can } from "@/lib/rbac/check";
-import type { Permission } from "@/generated/prisma";
+import type { Permission } from "@/generated/prisma/client";
 
 export function Sidebar({
   permissions,

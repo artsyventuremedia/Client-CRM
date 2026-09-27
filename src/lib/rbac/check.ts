@@ -1,4 +1,4 @@
-import type { Permission } from "@/generated/prisma";
+import type { Permission } from "@/generated/prisma/client";
 import type { Resource } from "./matrix";
 
 export type SessionPermissions = Record<string, Permission[]>;

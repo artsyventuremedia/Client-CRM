@@ -3,7 +3,7 @@ import type { NextAuthConfig } from "next-auth";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import type { Permission } from "@/generated/prisma";
+import type { Permission } from "@/generated/prisma/client";
 import type { SessionPermissions } from "@/lib/rbac/check";
 import { edgeAuthConfig } from "./edge-config";
 import { rateLimit, clientIp } from "@/lib/security/rate-limit";

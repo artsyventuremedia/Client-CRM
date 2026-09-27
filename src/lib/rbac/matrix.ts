@@ -1,4 +1,4 @@
-import { Permission, SystemRole } from "@/generated/prisma";
+import { Permission, SystemRole } from "@/generated/prisma/client";
 
 export const RESOURCES = [
   "leads",

@@ -4,7 +4,7 @@ import { requireOrgSession, ApiError, handleApiError } from "@/lib/api/guard";
 import { can } from "@/lib/rbac/check";
 import { ENTITY_RESOURCE, ENTITY_DOCUMENT_CATEGORY, entityBelongsToOrg, getEntityClientId } from "@/lib/api/entity-registry";
 import { saveFile } from "@/lib/storage";
-import type { DocumentCategory } from "@/generated/prisma";
+import type { DocumentCategory } from "@/generated/prisma/client";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 

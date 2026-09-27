@@ -1,5 +1,5 @@
 import type { Resource } from "@/lib/rbac/matrix";
-import type { Permission } from "@/generated/prisma";
+import type { Permission } from "@/generated/prisma/client";
 
 export interface NavItem {
   label: string;

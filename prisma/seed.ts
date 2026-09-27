@@ -1,4 +1,4 @@
-import { PrismaClient, SystemRole } from "../src/generated/prisma";
+import { PrismaClient, SystemRole } from "../src/generated/prisma/client";
 import bcrypt from "bcryptjs";
 import { DEFAULT_ROLE_MATRIX } from "../src/lib/rbac/matrix";
 

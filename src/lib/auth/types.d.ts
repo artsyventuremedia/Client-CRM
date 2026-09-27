@@ -1,4 +1,4 @@
-import type { Permission } from "@/generated/prisma";
+import type { Permission } from "@/generated/prisma/client";
 import type { DefaultSession } from "next-auth";
 import "next-auth";
 import "next-auth/jwt";
